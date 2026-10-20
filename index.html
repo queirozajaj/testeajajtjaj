@@ -721,6 +721,13 @@ td .ct.dev{font-size:11.5px}
 .scen .seg3 button{padding:4px 10px;border-radius:6px}
 .scen .seg3 button b{font-size:12.5px;white-space:nowrap}
 .scen .hirow{flex-wrap:nowrap;gap:6px}
+.scen .panbtn{order:2;margin-left:auto;display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:var(--accent-fg);border:0;border-radius:10px;padding:8px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;box-shadow:var(--shadow)}
+.scen .panbtn i{display:inline-flex;width:16px;height:16px}.scen .panbtn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.scen .panbtn b{font-weight:600;transition:transform .2s}.scen .panbtn:hover b{transform:translateX(3px)}.scen .panbtn:hover{filter:brightness(1.08)}
+.scen .cotbar{order:3}.scen .sn{order:4}
+.scen.sc-tec .cotbar{order:1}
+@media (max-width:640px){.scen.sc-tec .cotbar{order:3}}
+@media (max-width:640px){.scen .panbtn{margin-left:0;width:100%;justify-content:center}}
 .scen .hirow .seg3{flex:none}
 .scen .hipct input{width:54px;padding:3px 5px}
 .scen .sn{flex:1 0 100%;font-size:12px;margin-top:-2px}
@@ -1196,7 +1203,8 @@ function ajajYears(P, nPeople) {
     const quadro = P.quadro2025 + P.criados * (Y.y - 2025);
     // vacância de analistas = aposentadorias + exonerações por ano (números absolutos); AJAJ fica com a sua participação
     const apos = P.apos || 0, exo = (P.exo || {})[P.cenario] || 0;
-    const vac = P.cenario === 'Print' ? P.vacPrint * 3 : (apos + exo) * part;
+    const fill = P.fill != null ? P.fill : 1; // parte dos cargos vagos por vacância que o TJCE preenche (cenário)
+    const vac = (apos + exo) * part * fill;
     const cargos = novos + vac + (+Y.extra || 0); // extra: cargos criados a mais num ano (cenário otimista)
     const pos = cargos / (1 - Math.min(0.95, Y.desist));
     acum += pos;
@@ -1216,8 +1224,9 @@ function tecYears(P, reab) {
     const quadro = P.quadro2025 + P.criados * (Y.y - 2025);
     // aposentadorias (do ano, ou o padrão) + outras exonerações (cargo inteiro) × participação da área judiciária; as saídas para AJAJ entram à parte (reab/serv)
     const apos = Y.apos != null && Y.apos !== '' && isFinite(+Y.apos) ? Math.max(0, +Y.apos) : (P.apos || 0), exo = (P.exo || {})[P.cenario] || 0;
-    const vac = (apos + exo) * P.part;
-    const est0 = i === 0 ? P.estoque + P.tecAjaj : 0;
+    const fill = P.fill != null ? P.fill : 1;
+    const vac = (apos + exo) * P.part * fill;
+    const est0 = i === 0 ? P.estoque + P.tecAjaj * fill : 0;
     const r = reab[Y.y] || 0;
     const sv = (P.servY && P.servY[Y.y]) || 0;   // técnicos do TJCE convocados em AJAJ (cruzamento com a relação de servidores)
     const cargos = est0 + novos + vac + r + sv;
@@ -1584,14 +1593,14 @@ function defaults() {
     cargo: 'aj',
     aj: {
       P: {
-        cenario: 'Base', taxas: { Conservador: 1.5, Base: 2, Otimista: 3 }, aposAno: 3, exoAno: { Conservador: 6, Base: 8, Otimista: 11 }, ativos: 767, novos: 50, criados: 70, quadro2025: 723, vacPrint: 6, delay: 1, cot: 'H', devol: 'mesmo', nac: 0, auto: true, lotesVac: 2, otimDesist: 2, otimCriados: 45, otimAno: 2029,
+        cenario: 'Base', taxas: { Conservador: 1.5, Base: 2, Otimista: 3 }, aposAno: 3, exoAno: { Conservador: 6, Base: 8, Otimista: 11 }, fillPct: { Conservador: 60, Base: 75, Otimista: 90 }, ativos: 767, novos: 50, criados: 70, quadro2025: 723, vacPrint: 6, delay: 1, cot: 'H', devol: 'mesmo', nac: 0, auto: true, lotesVac: 2, otimDesist: 2, otimCriados: 45, otimAno: 2029,
         years: [2027, 2028, 2029].map((y, i) => ({ y, desist: [10, 15, 20][i], novos: null, manual: null, lotes: lotes27('aj', D.ajLotes).filter(l => l[0] === y).map(l => ({ m: l[1], s: l[2] })) }))
       },
       edits: {}, td: {}, ff: {}, hi: {}, po: {}, exo: {}, titMode: 'proj', def: null, hiPct: 0, hiSeed: 1
     },
     tec: {
       P: {
-        cenario: 'Conservador', taxas: { Conservador: 1, Base: 2, Otimista: 3 }, aposAno: 10, exoAno: { Conservador: 8, Base: 12, Otimista: 16 }, ativos: 1324, estoque: 104, tecAjaj: 16, tecAjajAuto: true, ojAno: { Conservador: 20, Base: 30, Otimista: 45 }, nac: 8, quadro2025: 1372, criados: 85, part: 88.2, desist: 5,
+        cenario: 'Conservador', taxas: { Conservador: 1, Base: 2, Otimista: 3 }, aposAno: 10, exoAno: { Conservador: 8, Base: 12, Otimista: 16 }, fillPct: { Conservador: 60, Base: 75, Otimista: 90 }, ativos: 1324, estoque: 104, tecAjaj: 16, tecAjajAuto: true, ojAno: { Conservador: 20, Base: 30, Otimista: 45 }, nac: 8, quadro2025: 1372, criados: 85, part: 88.2, desist: 5,
         mesesSaida: 3, mesesAdia: 18, corte: 200, delay: 1, janTD: 1, lotesVac: 2, fillVac: true, auto: true,
         years: [2027, 2028, 2029].map(y => ({ y, novos: 85, manual: y === 2027 ? 170 : null, lotes: lotes27('tec', D.tecLotes).filter(l => l[0] === y).map(l => ({ m: l[1], s: l[2] })) }))
       },
@@ -1617,6 +1626,7 @@ function applyState(o) {
   if (!S.ui.cmp || typeof S.ui.cmp !== 'object') S.ui.cmp = { aj: [], tec: [] };
   ['aj', 'tec'].forEach(c => { const n = (c === 'aj' ? AJ0 : TEC0).length; S.ui.cmp[c] = (Array.isArray(S.ui.cmp[c]) ? S.ui.cmp[c] : []).map(Number).filter((x, k, a) => Number.isInteger(x) && x >= 0 && x < n && a.indexOf(x) === k).slice(0, 4); });
   ['aj', 'tec'].forEach(c => { const n = (c === 'aj' ? AJ0 : TEC0).length; Object.keys(S[c]).forEach(f => { const v = S[c][f]; if (f === 'P' || f === 'def' || !v || typeof v !== 'object' || Array.isArray(v)) return; Object.keys(v).forEach(k => { if (/^\d+$/.test(k) && +k >= n) delete v[k]; }); }); if (S.ui.pins[c] != null && !(+S.ui.pins[c] < n)) S.ui.pins[c] = null; });
+  ['aj', 'tec'].forEach(c => { if (!['Conservador', 'Base', 'Otimista'].includes(S[c].P.cenario)) S[c].P.cenario = 'Base'; });
   if (S.ui.show === 'cmp' && !S.ui.cmp[S.cargo].length) S.ui.show = '';
   S.ui.lote = null;
   if (S.ui.themeV !== 2) { S.ui.theme = 'light'; S.ui.themeV = 2; }
@@ -1716,6 +1726,7 @@ function moveToAC(res, lists, i) {
 
 // ---------- cálculo ----------
 let AJ = null, TC = null;
+const fillOf = P => { const v = (P.fillPct || {})[P.cenario]; return v == null || v === '' || !isFinite(+v) ? 1 : Math.min(1, Math.max(0, +v / 100)); };
 const numObj = o => { const r = {}; for (const k in (o || {})) r[k] = Math.max(0, +o[k] || 0); return r; };
 const pctObj = o => { const r = {}; for (const k in o) r[k] = (+o[k] || 0) / 100; return r; };
 const setOf = o => new Set(Object.keys(o).filter(k => o[k]).map(Number));
@@ -1783,7 +1794,7 @@ function computeAJ(st, m) {
   const listsBase = hiS.size ? ajajLists(people.map(p => ({ ...p, lists: p.lists0 }))) : lists;
   // Otimista: um pouco mais de desistência (aprovados em outros concursos) e criação extra de cargos de analista num ano
   const otim = P.cenario === 'Otimista';
-  const EP = { cenario: P.cenario, apos: Math.max(0, +P.aposAno || 0), exo: numObj(P.exoAno), novos: +P.novos || 0, criados: +P.criados || 0, quadro2025: +P.quadro2025 || 0, vacPrint: +P.vacPrint || 0, years: P.years.map(Y => ({ ...Y, desist: P.auto === false ? 0 : ((+Y.desist || 0) + (otim ? +P.otimDesist || 0 : 0)) / 100, extra: otim && Y.y === +P.otimAno ? (+P.otimCriados || 0) * (+P.criados > 0 ? (+P.novos || 0) / +P.criados : 0) : 0, manual: allPub(Y) ? pubSum(Y) : Y.manual })) };
+  const EP = { cenario: P.cenario, apos: Math.max(0, +P.aposAno || 0), exo: numObj(P.exoAno), fill: fillOf(P), novos: +P.novos || 0, criados: +P.criados || 0, quadro2025: +P.quadro2025 || 0, vacPrint: +P.vacPrint || 0, years: P.years.map(Y => ({ ...Y, desist: P.auto === false ? 0 : ((+Y.desist || 0) + (otim ? +P.otimDesist || 0 : 0)) / 100, extra: otim && Y.y === +P.otimAno ? (+P.otimCriados || 0) * (+P.criados > 0 ? (+P.novos || 0) / +P.criados : 0) : 0, manual: allPub(Y) ? pubSum(Y) : Y.manual })) };
   const totals = ajajYears(EP, people.length);
   let lotes = buildLotes(P.years, totals);
   // exoneração marcada: a pessoa toma posse e depois sai; abre um novo cargo vago, nomeado alguns lotes depois (lotes publicados não mudam)
@@ -1795,8 +1806,10 @@ function computeAJ(st, m) {
     let cur = lotes0, sig = '';
     for (let it = 0; it < 6; it++) {
       const ev = sim0(cur), add = {}, where = {};
+      const fl = fillOf(P); let acc = 0.5;
       exoIds.forEach(i => {
         const r = ev.rec[i]; if (!r || r.type !== 'call' || r.date == null || !isFinite(r.date)) return;
+        acc += fl; if (acc < 1) { where[i] = 'skip'; return; } acc -= 1;
         const k = regs.findIndex(L => L.date > r.date); if (k < 0) return;
         for (let j = k, n = 0; j < regs.length; j++) { if (regs[j].pub) continue; if (++n === NLa) { add[regs[j].id] = (add[regs[j].id] || 0) + 1; where[i] = regs[j].id; break; } }
       });
@@ -1863,7 +1876,7 @@ function computeTEC(aj, st, m) {
     if (!r || r.type !== 'call' || aj.outS.has(i) || r.date == null || !isFinite(r.date)) return;
     servCalls.push(i); servD[i] = r.date;
   });
-  const EP = { cenario: P.cenario, apos: Math.max(0, +P.aposAno || 0), exo: numObj(P.exoAno), estoque: +P.estoque || 0, tecAjaj: servAuto || !auto ? 0 : +P.tecAjaj || 0, servY: {}, quadro2025: +P.quadro2025 || 0, criados: +P.criados || 0, part: (+P.part || 0) / 100, desist: auto ? (+P.desist || 0) / 100 : 0, years: P.years.map(Y => allPub(Y) ? { ...Y, manual: pubSum(Y) } : Y) };
+  const EP = { cenario: P.cenario, apos: Math.max(0, +P.aposAno || 0), exo: numObj(P.exoAno), fill: fillOf(P), estoque: +P.estoque || 0, tecAjaj: servAuto || !auto ? 0 : +P.tecAjaj || 0, servY: {}, quadro2025: +P.quadro2025 || 0, criados: +P.criados || 0, part: (+P.part || 0) / 100, desist: auto ? (+P.desist || 0) / 100 : 0, years: P.years.map(Y => allPub(Y) ? { ...Y, manual: pubSum(Y) } : Y) };
   const delay = Math.max(0, Math.round(+P.delay || 0));
   // cargos vagos por exoneração: entram NL lotes depois (lotes publicados não mudam)
   const vacsAll = ev => {
@@ -1883,7 +1896,10 @@ function computeTEC(aj, st, m) {
     // ano com “Ajuste” preenchido: o total fica exatamente nesse número; cargos vagos novos passam para o ano seguinte
     const cap = totals.map((t, yi) => { const mn = P.years[yi].manual; return mn === null || mn === '' || mn === undefined ? Infinity : Math.max(0, +mn - t.used); });
     const add = {}, where = {}, addY = totals.map(() => ({ aj: 0, serv: 0, exo: 0 }));
+    // o TJCE repõe só parte dos cargos vagos por vacância (cenário): escolha regular, na ordem das saídas
+    const fl = fillOf(P); let acc = 0.5;
     vacs.slice().sort((a, b) => a.d - b.d).forEach(v => {
+      acc += fl; if (acc < 1) { where[v.i] = 'skip'; return; } acc -= 1;
       let k = regs.findIndex(L => L.date > v.d), n = 0, idx = -1;
       if (k < 0) return;
       for (let j = k; j < regs.length; j++) { if (regs[j].pub) continue; if (++n === NL) { idx = j; break; } }
@@ -2056,7 +2072,7 @@ function explainStatus(res, i) {
   if (res.kind === 'tec' && r.type === 'call') {
     const e = ajEff(res, i), p = res.people[i], vl = vacLote(res, i);
     if (e === 'post') h += `<div class="th">TD depois de convocado(a) · ${destOf(p)} quase ao mesmo tempo</div><p>Convocado(a) no técnico em ${fd(r.date)} e em ${destOf(p)} em ${fd(p.entry)}: fica com ${destOf(p)} e não toma posse no técnico. ${r.replacedBy ? `A vaga vai para <b>${r.replacedBy.i != null ? esc(nm(res, r.replacedBy.i)) : 'o próximo da lista'}</b> (${LNAME[r.replacedBy.via]}) no lote complementar de ${fmtDate(r.replacedBy.date)}.` : 'A vaga vai para o próximo da mesma lista num lote complementar.'}</p>`;
-    if (e === 'exo' || (!e && S.tec.exo && S.tec.exo[i])) h += `<div class="th">Exoneração · novo cargo vago${e ? '' : ' (marcada por você)'}</div><p>${e ? `Toma posse no técnico (convocação em ${fd(r.date)}) e, ao ir para ${destOf(p)} (${fd(p.entry)}), pede exoneração do cargo de técnico.` : 'Toma posse no técnico e depois pede exoneração.'} Não é TD: a fila não anda. Abre-se um novo cargo vago de técnico, que pode aumentar o número de convocações${res.fillVac ? (vl ? (() => { const Lv = res.lotes.find(L => L.id === vl), dv = e ? p.entry : (p.entry != null && r && p.entry > r.date ? p.entry : r && r.date), yd = dv != null ? Math.floor(dv / 12) : null, fx = Lv && yd != null ? S.tec.P.years.filter(Y => Y.y >= yd && Y.y < Lv.y && Y.manual != null && Y.manual !== '').map(Y => `${Y.y} (${Y.manual})`) : []; return `. O cargo vaga em <b>${fd(dv)}</b>${p.entry != null && dv === p.entry ? ', quando sai para ' + destOf(p) : ''}, e o novo cargo entra no <b>lote ${vl}${Lv ? ' (' + fmtDate(Lv.date) + ')' : ''}</b>: ${res.NL} ${plural(res.NL, 'lote')} depois${fx.length ? `, pulando ${fx.join(', ')}, que ${fx.length > 1 ? 'estão' : 'está'} com o total fixado em “Ajuste”` : ''}`; })() : ': não coube em nenhum lote até o fim do período') : ', mas a opção de preencher cargos vagos por exoneração está desligada'}.</p>`;
+    if (e === 'exo' || (!e && S.tec.exo && S.tec.exo[i])) h += `<div class="th">Exoneração · novo cargo vago${e ? '' : ' (marcada por você)'}</div><p>${e ? `Toma posse no técnico (convocação em ${fd(r.date)}) e, ao ir para ${destOf(p)} (${fd(p.entry)}), pede exoneração do cargo de técnico.` : 'Toma posse no técnico e depois pede exoneração.'} Não é TD: a fila não anda. Abre-se um novo cargo vago de técnico, que pode aumentar o número de convocações${res.fillVac ? (vl === 'skip' ? `: no cenário ${S.tec.P.cenario}, o TJCE repõe ${Math.round(fillOf(S.tec.P) * 100)}% dos cargos vagos por vacância, e este fica sem reposição no período` : vl ? (() => { const Lv = res.lotes.find(L => L.id === vl), dv = e ? p.entry : (p.entry != null && r && p.entry > r.date ? p.entry : r && r.date), yd = dv != null ? Math.floor(dv / 12) : null, fx = Lv && yd != null ? S.tec.P.years.filter(Y => Y.y >= yd && Y.y < Lv.y && Y.manual != null && Y.manual !== '').map(Y => `${Y.y} (${Y.manual})`) : []; return `. O cargo vaga em <b>${fd(dv)}</b>${p.entry != null && dv === p.entry ? ', quando sai para ' + destOf(p) : ''}, e o novo cargo entra no <b>lote ${vl}${Lv ? ' (' + fmtDate(Lv.date) + ')' : ''}</b>: ${res.NL} ${plural(res.NL, 'lote')} depois${fx.length ? `, pulando ${fx.join(', ')}, que ${fx.length > 1 ? 'estão' : 'está'} com o total fixado em “Ajuste”` : ''}`; })() : ': não coube em nenhum lote até o fim do período') : ', mas a opção de preencher cargos vagos por exoneração está desligada'}.</p>`;
   }
   return h;
 }
@@ -2098,7 +2114,7 @@ function explainSim(res, i) {
 }
 function explainRange(c, i) {
   const rg = rangeFor(c, i);
-  return `<div class="th">Previsão por cenário de vacância${cmpAll() ? ' · modelos A e B' : ''}</div>${rgLines(rg).map(l => `<p>${l}</p>`).join('')}<p class="tm">Muda as exonerações por ano do cenário (aposentadorias e saídas calculadas para AJAJ seguem iguais). Os outros ajustes e saídas marcadas continuam iguais.</p>`;
+  return `<div class="th">Previsão por cenário de vacância${cmpAll() ? ' · modelos A e B' : ''}</div>${rgLines(rg).map(l => `<p>${l}</p>`).join('')}<p class="tm">Muda as exonerações por ano e quanto dos cargos vagos o TJCE repõe (60% no Conservador, 75% no Base, 90% no Otimista). Aposentadorias, saídas calculadas para AJAJ e as suas marcações continuam iguais.</p>`;
 }
 // ---------- servidores do TJCE que fizeram a prova ----------
 function explainServ(res, i) {
@@ -2107,7 +2123,7 @@ function explainServ(res, i) {
   if (res.kind === 'aj' && sv === 'T') {
     const r = res.ev.rec[i], nl = Math.max(1, Math.round(+S.tec.P.lotesVac || 2));
     h += `<p>Se tomar posse em AJAJ, pede exoneração do cargo de técnico e <b>abre um novo cargo vago de técnico</b> (não é TD: a fila de técnico não anda, só pode aumentar o número de convocações).</p>`;
-    h += r && r.type === 'call' && !res.outS.has(i) && r.date != null && isFinite(r.date) ? `<p>Na simulação, é convocado(a) em AJAJ em ${fmtDate(r.date)}; o cargo vago de técnico entra ${nl} ${plural(nl, 'lote')} depois${TC && TC.vacWhere && TC.vacWhere['s' + i] ? ` (lote ${TC.vacWhere['s' + i]} do técnico)` : ''}.${S.tec.P.tecAjajAuto === false ? ' (No momento a aba de Técnico usa o número informado à mão, não este cruzamento.)' : ''}</p>` : '<p class="tm">Na simulação, não é convocado(a) em AJAJ no período, então não abre vaga de técnico até lá.</p>';
+    h += r && r.type === 'call' && !res.outS.has(i) && r.date != null && isFinite(r.date) ? `<p>Na simulação, é convocado(a) em AJAJ em ${fmtDate(r.date)}; o cargo vago de técnico entra ${nl} ${plural(nl, 'lote')} depois${TC && TC.vacWhere && TC.vacWhere['s' + i] ? (TC.vacWhere['s' + i] === 'skip' ? ` (no cenário ${S.tec.P.cenario}, o TJCE repõe só ${Math.round(fillOf(S.tec.P) * 100)}% dos cargos vagos, e este fica sem reposição)` : ` (lote ${TC.vacWhere['s' + i]} do técnico)`) : ''}.${S.tec.P.tecAjajAuto === false ? ' (No momento a aba de Técnico usa o número informado à mão, não este cruzamento.)' : ''}</p>` : '<p class="tm">Na simulação, não é convocado(a) em AJAJ no período, então não abre vaga de técnico até lá.</p>';
   } else if (res.kind === 'aj') h += '<p>Já é analista e fez o concurso de novo. A relação não informa a área (judiciária ou outra), então pode ser analista de outra área.</p>';
   else h += sv === 'T' ? '<p>Já é técnico e fez o concurso de técnico de novo.</p>' : '<p>Já é analista do TJCE e fez o concurso de técnico.</p>';
   return h + '<p class="tm">Cruzamento pelo nome completo; pode haver homônimos.</p>';
@@ -2262,7 +2278,7 @@ function hiEligCount(c) {
 function renderScen() {
   const c = S.cargo, A = S.aj, res = R(), pct = +S[c].hiPct || 0, pool = hiEligCount(c), k = Math.round(pool * pct / 100);
   // barra compacta: os textos explicativos ficam nas dicas (passe o mouse ou toque no rótulo)
-  let h = '<div class="scen">', sn = '';
+  let h = `<div class="scen sc-${c}">`, sn = '';
   if (c === 'aj') {
     const m = A.titMode || 'proj', has = !!(A.def && A.def.n);
     const b = (v, t, sub) => `<button data-tm="${v}" aria-pressed="${m === v}" title="${sub}"><b>${t}</b></button>`;
@@ -2272,6 +2288,7 @@ function renderScen() {
   }
   h += `<div class="sg"><div class="sl" data-tip="h:hisc">Reprovação na HI</div><div class="hirow"><div class="seg3 sm" role="group" aria-label="Percentual de reprovação">${[0, 30, 60, 100].map(v => `<button data-hip="${v}" aria-pressed="${pct === v}"><b>${v}%</b></button>`).join('')}</div>
     <label class="hipct"><input type="number" id="hiPct" min="0" max="100" step="5" value="${pct}" aria-label="Percentual de reprovados"> %</label>${pct > 0 && pct < 100 ? `<button class="btn sm ghost" data-act="hiSeed" title="Novo sorteio">↻</button>` : ''}</div></div>`;
+  h += `<button class="panbtn" data-act="goPanorama" title="Abrir o Panorama da turma">${ico('pie')}<span>Panorama da turma</span><b aria-hidden="true">→</b></button>`;
   if (pct) sn += `<div class="sn">${k - (res.hiOkS ? res.hiOkS.size : 0)} de ${pool} cotistas raciais reprovados na heteroidentificação${pct < 100 ? ' (sorteio simulado, não indica ninguém de verdade)' : ''}${res.hiOkS && res.hiOkS.size ? ` · ${res.hiOkS.size} ${plural(res.hiOkS.size, 'marcado', 'marcados')} como ${plural(res.hiOkS.size, 'aprovado', 'aprovados')} (<button class="lnk" data-act="hiOkClear">desfazer todos</button>)` : ''}${S.ui.pins[c] != null ? ' · o nome que você acompanha conta como aprovado' : ''}</div>`;
   { const cm = cotMode(); h += `<div class="sg cotbar"><div class="sl" data-tip="h:cot">Cotista c/ nota de ampla</div><button class="mchip" data-act="openAvanc" title="Alterar em Avançado">${MSH[cm] || COTN[cm]}</button></div>`; }
   $('#scen').innerHTML = h + sn + '</div>';
@@ -2660,7 +2677,7 @@ function renderPanel() {
   const panel = $('#panel');
   if (!CFGV[VIEW] || !viewOk(VIEW)) { panel.innerHTML = ''; return; }
   const c = S.cargo, P = S[c].P, res = R();
-  const opts = c === 'aj' ? ['Conservador', 'Base', 'Otimista', 'Print'] : ['Conservador', 'Base', 'Otimista'];
+  const opts = ['Conservador', 'Base', 'Otimista'];
   let h = '';
   if (c === 'aj') {
     h += sec('anos', 'Convocações por ano', `${P.auto === false ? '<p class="autonote"><b>Automático OFF.</b> A desistência estimada não entra no cálculo: só saem as pessoas que você marcar na lista. Ligue o Automático ao lado de “Filtros”.</p>' : ''}<div class="scroll"><table class="ytbl"><thead><tr><th>Ano</th><th>Cargos novos</th><th>Desist. %</th><th>Estimado</th><th>Ajuste</th><th>Usado</th></tr></thead><tbody>
@@ -2719,9 +2736,10 @@ function renderPanel() {
     ${fld(c === 'aj' ? 'Aposentadorias de analistas por ano' : 'Aposentadorias de técnicos por ano (padrão)', `${c}.P.aposAno`, P.aposAno, c === 'aj' ? 'média 2020–2026: 2,9 · igual em todos os cenários' : 'média 2023–2025: 9,3 · 2020–2026: 12,7 · vale para o ano deixado em branco abaixo', 'step="1" min="0"')}
     ${c === 'tec' ? `<div class="nacbox"><div class="nact">Aposentadorias de técnicos ano a ano (opcional)</div>${P.years.map((Y, yi) => fld('Aposentadorias em ' + Y.y, `tec.P.years.${yi}.apos`, Y.apos == null ? '' : Y.apos, 'em branco = ' + P.aposAno, 'step="1" min="0" placeholder="' + P.aposAno + '"')).join('')}</div>` : ''}
     ${['Conservador', 'Base', 'Otimista'].map(k => fld((c === 'aj' ? 'Exonerações de analistas por ano · ' : 'Outras exonerações de técnicos por ano · ') + k, `${c}.P.exoAno.${k}`, (P.exoAno || {})[k], k === P.cenario ? 'cenário atual' : null, 'step="1" min="0"')).join('')}
+    <div class="nacbox"><div class="nact">Quanto dos cargos vagos por vacância o TJCE repõe (%)</div>${['Conservador', 'Base', 'Otimista'].map(k => fld('Reposição · ' + k, `${c}.P.fillPct.${k}`, (P.fillPct || {})[k], k === P.cenario ? 'cenário atual' : null, 'step="5" min="0" max="100"')).join('')}
+      <p class="note">Vale para os cargos que vagam por aposentadoria e exoneração${c === 'tec' ? ', incluindo os técnicos que saem para AJAJ' : ''}. Não mexe nos cargos vagos que já existem${c === 'tec' ? ' (os 104)' : ''} nem nos cargos novos criados por lei.</p></div>
     <div id="vactbl">${vacTbl(res)}</div>
     ${how('vachist', vacHist(c))}
-    ${c === 'aj' ? fld('Vacância por quadrimestre (cenário Print)', 'aj.P.vacPrint', P.vacPrint, '× 3 por ano', 'min="0"') : ''}
     ${c === 'aj' ? `<div class="nacbox"><div class="nact">Só no cenário Otimista</div>
       ${fld('Desistência a mais (pontos percentuais)', 'aj.P.otimDesist', P.otimDesist, `soma em cada ano: ${P.years.map(Y => `${Y.y} ${(+Y.desist || 0) + (+P.otimDesist || 0)}%`).join(' · ')}`, 'min="0" max="20" step="0.5"')}
       ${fld('Cargos de analista criados a mais', 'aj.P.otimCriados', P.otimCriados, `em ${P.otimAno}; AJAJ fica com ${+P.criados > 0 ? Math.round((+P.otimCriados || 0) * (+P.novos || 0) / +P.criados) : 0} (participação ${P.novos}/${P.criados})`, 'min="0"')}
@@ -2777,7 +2795,7 @@ function vacRows(res) {
     const ds = P.auto === false ? 0 : isAJ ? ((+P.years[yi].desist || 0) + (otim ? +P.otimDesist || 0 : 0)) / 100 : (+P.desist || 0) / 100;
     const posse = Math.round(calls * (1 - Math.min(0.95, ds)));
     let tot, extra = {};
-    if (isAJ) tot = P.cenario === 'Print' ? +P.vacPrint * 3 : (t.apos || 0) + (t.exo || 0);
+    if (isAJ) tot = (t.apos || 0) + (t.exo || 0);
     else { const dep = t.dep || { serv: 0, conc: 0 }, man = yi === 0 ? Math.max(0, (t.estoque || 0) - (+P.estoque || 0)) : 0; extra = { sv: dep.serv + man, conc: dep.conc }; tot = (t.apos || 0) + (t.exo || 0) + extra.sv + extra.conc; }
     const pc = at ? tot / at * 100 : null, H = VHIST[res.kind];
     rows.push({ t, at, posse, tot, pc, rl: pc == null ? '' : pc < H.lo ? 'abaixo do histórico' : pc > H.hi ? 'acima do histórico' : 'dentro do histórico', ...extra });
@@ -2789,11 +2807,11 @@ function vacTbl(res) {
   const P = S[res.kind].P, rows = vacRows(res);
   if (res.kind === 'aj') {
     const part = +P.criados > 0 ? (+P.novos || 0) / +P.criados : 0;
-    return `${P.cenario === 'Print' ? `<p class="note">Cenário Print: ${P.vacPrint} vacâncias por quadrimestre (${P.vacPrint * 3} por ano), no lugar de aposentadorias e exonerações.</p>` : ''}<div class="scroll"><table class="ytbl"><thead><tr><th>Ano</th><th>Ativos no início</th><th>Aposent.</th><th>Exoner.</th><th>Total</th><th>% dos ativos</th><th>Realista?</th><th>Para AJAJ</th></tr></thead><tbody>${rows.map(r => `<tr><td><b>${r.t.y}</b></td><td class="out">${r.at.toLocaleString('pt-BR')}</td><td class="out">${P.cenario === 'Print' ? '—' : r.t.apos}</td><td class="out">${P.cenario === 'Print' ? '—' : r.t.exo}</td><td class="out strong">${r.tot}</td><td class="out">${r.pc == null ? '—' : f1(r.pc) + '%'}</td><td class="out"><span class="note">${r.rl}</span></td><td class="out">${f1(r.t.vac)}</td></tr>`).join('')}</tbody></table></div>
-      <p class="note">Vacância de analistas = aposentadorias + exonerações, em pessoas por ano. % dos ativos = total ÷ analistas ativos no início do ano: ${(+P.ativos || 0).toLocaleString('pt-BR')} hoje, + quem toma posse em AJAJ no ano, − as vacâncias (não conta nomeações de outras especialidades). AJAJ fica com ${f1(part * 100)}% das vacâncias (${P.novos} de ${P.criados} cargos novos). “Realista?” compara com o histórico: de ${f1(VHIST.aj.lo)}% a ${f1(VHIST.aj.hi)}% dos ativos.</p>`;
+    return `<div class="scroll"><table class="ytbl"><thead><tr><th>Ano</th><th>Ativos no início</th><th>Aposent.</th><th>Exoner.</th><th>Total</th><th>% dos ativos</th><th>Realista?</th><th>TJCE repõe</th><th>Para AJAJ</th></tr></thead><tbody>${rows.map(r => `<tr><td><b>${r.t.y}</b></td><td class="out">${r.at.toLocaleString('pt-BR')}</td><td class="out">${r.t.apos}</td><td class="out">${r.t.exo}</td><td class="out strong">${r.tot}</td><td class="out">${r.pc == null ? '—' : f1(r.pc) + '%'}</td><td class="out"><span class="note">${r.rl}</span></td><td class="out">${f1(r.tot * fillOf(P))}</td><td class="out">${f1(r.t.vac)}</td></tr>`).join('')}</tbody></table></div>
+      <p class="note">Vacância de analistas = aposentadorias + exonerações, em pessoas por ano. % dos ativos = total ÷ analistas ativos no início do ano: ${(+P.ativos || 0).toLocaleString('pt-BR')} hoje, + quem toma posse em AJAJ no ano, − as vacâncias (não conta nomeações de outras especialidades). O TJCE repõe ${Math.round(fillOf(P) * 100)}% delas no cenário ${P.cenario}, e AJAJ fica com ${f1(part * 100)}% do que é reposto (${P.novos} de ${P.criados} cargos novos). “Realista?” compara com o histórico: de ${f1(VHIST.aj.lo)}% a ${f1(VHIST.aj.hi)}% dos ativos.</p>`;
   }
-  return `<div class="scroll"><table class="ytbl"><thead><tr><th>Ano</th><th>Ativos no início</th><th>Aposent.</th><th>Outras exoner.</th><th data-tip="h:vserv">Técnicos atuais → AJAJ</th><th data-tip="h:vconc">Deste concurso → AJAJ/OJ</th><th>Total</th><th>% dos ativos</th><th>Realista?</th></tr></thead><tbody>${rows.map(r => `<tr><td><b>${r.t.y}</b></td><td class="out">${r.at.toLocaleString('pt-BR')}</td><td class="out">${r.t.apos}</td><td class="out">${r.t.exo}</td><td class="out">${r.sv}</td><td class="out">${r.conc}</td><td class="out strong">${r.tot}</td><td class="out">${r.pc == null ? '—' : f1(r.pc) + '%'}</td><td class="out"><span class="note">${r.rl}</span></td></tr>`).join('')}</tbody></table></div>
-    <p class="note">Vacância = aposentadorias + exonerações, em técnicos por ano. As saídas para AJAJ não são uma taxa fixa: o site conta, ano a ano, os técnicos atuais do TJCE que a simulação de AJAJ convoca e os técnicos deste concurso que tomam posse e depois saem para AJAJ ou OJ (no ano da saída). Por isso a vacância muda com a aba de Analista, os títulos e as marcações. % dos ativos = total ÷ técnicos ativos no início do ano: ${(+P.ativos || 0).toLocaleString('pt-BR')} hoje (621 optantes + 703 do PCCR), + quem toma posse no ano, − as vacâncias. Aposentadorias e outras exonerações entram na área judiciária com ${f1(+P.part || 0)}%; as saídas para AJAJ entram inteiras, ${P.lotesVac || 2} ${plural(+P.lotesVac || 2, 'lote', 'lotes')} depois da saída. “Realista?” compara com o histórico: de ${f1(VHIST.tec.lo)}% a ${f1(VHIST.tec.hi)}% dos ativos.${S.tec.P.auto === false ? ' <b>Automático OFF:</b> as saídas para AJAJ só contam as exonerações que você marcar.' : ''}</p>`;
+  return `<div class="scroll"><table class="ytbl"><thead><tr><th>Ano</th><th>Ativos no início</th><th>Aposent.</th><th>Outras exoner.</th><th data-tip="h:vserv">Técnicos atuais → AJAJ</th><th data-tip="h:vconc">Deste concurso → AJAJ/OJ</th><th>Total</th><th>% dos ativos</th><th>Realista?</th><th>TJCE repõe</th></tr></thead><tbody>${rows.map(r => `<tr><td><b>${r.t.y}</b></td><td class="out">${r.at.toLocaleString('pt-BR')}</td><td class="out">${r.t.apos}</td><td class="out">${r.t.exo}</td><td class="out">${r.sv}</td><td class="out">${r.conc}</td><td class="out strong">${r.tot}</td><td class="out">${r.pc == null ? '—' : f1(r.pc) + '%'}</td><td class="out"><span class="note">${r.rl}</span></td><td class="out">${f1(r.tot * fillOf(P))}</td></tr>`).join('')}</tbody></table></div>
+    <p class="note">Vacância = aposentadorias + exonerações, em técnicos por ano. As saídas para AJAJ não são uma taxa fixa: o site conta, ano a ano, os técnicos atuais do TJCE que a simulação de AJAJ convoca e os técnicos deste concurso que tomam posse e depois saem para AJAJ ou OJ (no ano da saída). Por isso a vacância muda com a aba de Analista, os títulos e as marcações. % dos ativos = total ÷ técnicos ativos no início do ano: ${(+P.ativos || 0).toLocaleString('pt-BR')} hoje (621 optantes + 703 do PCCR), + quem toma posse no ano, − as vacâncias. O TJCE repõe ${Math.round(fillOf(P) * 100)}% dessas vagas no cenário ${P.cenario} (“TJCE repõe”). Aposentadorias e outras exonerações entram na área judiciária com ${f1(+P.part || 0)}%; as saídas para AJAJ entram inteiras, ${P.lotesVac || 2} ${plural(+P.lotesVac || 2, 'lote', 'lotes')} depois da saída. “Realista?” compara com o histórico: de ${f1(VHIST.tec.lo)}% a ${f1(VHIST.tec.hi)}% dos ativos.${S.tec.P.auto === false ? ' <b>Automático OFF:</b> as saídas para AJAJ só contam as exonerações que você marcar.' : ''}</p>`;
 }
 function vacHist(c) {
   return c === 'aj'
@@ -3029,7 +3047,7 @@ function tagsHtml(res, i, row) {
   if (r && r.comp) tags += `<span class="tag sub" data-tip="s:${i}">Substituto</span>`;
   if (row.kind === 'refuse') tags += `<span class="tag td" data-tip="s:${i}">TD antes da conv. (${destOf(res.people[i])})</span>`;
   if (res.kind === 'aj' && S.aj.edits[i] && S.aj.edits[i].tit != null) tags += '<span class="tag ed">título editado</span>';
-  if (res.kind === 'aj' && (S.aj.exo || {})[i]) tags += `<span class="tag out2" data-tip="s:${i}">exoneração → cargo vago${res.vacWhere && res.vacWhere[i] ? ' no lote ' + res.vacWhere[i] : ''}</span>`;
+  if (res.kind === 'aj' && (S.aj.exo || {})[i]) tags += `<span class="tag out2" data-tip="s:${i}">exoneração → cargo vago${res.vacWhere && res.vacWhere[i] ? (res.vacWhere[i] === 'skip' ? ' (sem reposição no cenário)' : ' no lote ' + res.vacWhere[i]) : ''}</span>`;
   if (res.kind === 'tec' && row.kind !== 'refuse') { const e = ajEff(res, i); if (e === 'post') tags += `<span class="tag td" data-tip="s:${i}">TD após conv. (${destOf(res.people[i])})</span>`; else if (e === 'exo') tags += `<span class="tag out2" data-tip="s:${i}">exoneração → cargo vago</span>`; else if ((S.tec.exo || {})[i]) tags += `<span class="tag out2" data-tip="s:${i}">exoneração (marcada)</span>`; else if (res.auto !== false && res.ajCat && res.ajCat[i] && (S.tec.ajx || {})[i] === 'none') tags += `<span class="tag ref" data-tip="a:${i}">fica no técnico (desmarcado)</span>`; }
   return tags;
 }
@@ -3236,7 +3254,7 @@ function renderDrawer() {
     if (all.length) h += `<div class="dsec"><h3>Aprovações em outros concursos (${all.length})</h3><div class="aplist">${all.map(x => `<div class="apitem ${x.status === 'parcial' ? 'parc' : ''}">${apLine(x)}</div>`).join('')}</div><p class="note">Cruzamento pelo nome completo com ${APD.src.length} resultados de concursos (veja a lista no rodapé). Pode haver homônimos. Quem já foi aprovado(a) em outro concurso tem mais chance de enviar TD ou pedir final de fila.</p></div>`; }
   if (r && r.type === 'call' && !res.outS.has(i)) {
     const rg = rangeFor(c, i);
-    h += `<div class="dsec"><h3>Previsão por cenário${cmpAll() ? ' · modelos A e B' : ''}</h3><div class="range">${rgLines(rg).map(l => `<span>${l}</span>`).join('')}</div><p class="note">Faixa provável: <b>${rangeText(rg)}</b>. Varia as exonerações por ano do cenário; o resto continua igual.</p></div>`;
+    h += `<div class="dsec"><h3>Previsão por cenário${cmpAll() ? ' · modelos A e B' : ''}</h3><div class="range">${rgLines(rg).map(l => `<span>${l}</span>`).join('')}</div><p class="note">Faixa provável: <b>${rangeText(rg)}</b>. Varia as exonerações por ano e quanto dos cargos vagos o TJCE repõe; o resto continua igual.</p></div>`;
   }
   h += `<div class="callout">${explainDelta(res, i)}</div>`;
   const st = explainStatus(res, i); if (st) h += `<div class="callout amber">${st}</div>`;
@@ -3667,6 +3685,7 @@ document.addEventListener('click', e => {
     case 'hideNotice': S.ui.noticeHidden = true; save(); $('#notice').hidden = true; break;
     case 'clearLote': S.ui.lote = null; save(); renderSummary(); renderTable(); break;
     case 'tail': S.ui.tail = !S.ui.tail; save(); renderTable(); break;
+    case 'goPanorama': go('panorama'); break;
     case 'frSub': S.ui.frSub = S.ui.frSub === t.dataset.v ? '' : t.dataset.v; save(); renderTable(); break;
     case 'autoTog': { const P2 = S[c].P; P2.auto = P2.auto === false; update(true); toast(P2.auto ? (c === 'aj' ? 'Automático ON · a desistência estimada volta a entrar no número de convocações' : 'Automático ON · o sistema calcula TD antes, TD depois, exonerações e a desistência estimada') : 'Automático OFF · só valem as suas marcações (toque num nome para marcar)'); break; }
     case 'tbarMore': S.ui.fopen = $('#tb2').hidden; save(); renderTable(); if (S.ui.fopen) { const f = $('#conc'); if (f && !isMobile()) f.focus({ preventScroll: true }); } break;
