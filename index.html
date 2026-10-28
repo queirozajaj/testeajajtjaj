@@ -2106,7 +2106,7 @@ function explainDelta(res, i) {
     const crossers = [];
     res.people.forEach((q, e) => { if (e === i || q.tit === q.tit0) return; const be = res.base.rec[e]; if (!be || be.type !== 'call') return; if ((ORIG_AJ[e] < o) !== (be.slot < bs)) crossers.push(e); });
     const up = crossers.filter(e => ORIG_AJ[e] < o), dn = crossers.filter(e => ORIG_AJ[e] > o);
-    let t = `<p><b>${o > bs ? '▲' : '▼'}${Math.abs(o - bs)} por mudança nos títulos</b> (${TITMODE[res.mode]}). `;
+    let t = up.length || dn.length || p.tit !== p.tit0 ? `<p><b>${o > bs ? '▲' : '▼'}${Math.abs(o - bs)} por mudança nos títulos</b> (${TITMODE[res.mode]}). ` : `<p><b>${o > bs ? '▲' : '▼'}${Math.abs(o - bs)} pelo efeito dos lotes</b> (não é título). A ordem original é montada vaga por vaga; nos lotes, as vagas da AC de cada lote são preenchidas primeiro, e quem está na ampla e numa cota e é alcançado pelas duas no mesmo lote entra pela AC, liberando a vaga da cota para o próximo cotista. Isso muda a posição de quem está perto dessas pessoas. `;
     if (p.tit !== p.tit0) t += `O seu título mudou de ${f2(p.tit0)} para ${f2(p.tit)} (total ${f2(p.pre + p.tit0)} → ${f2(p.tot)}). `;
     if (up.length) t += `Passaram para trás de você: ${nameList(res, up)}. `;
     if (dn.length) t += `Passaram à sua frente: ${nameList(res, dn)}. `;
