@@ -1904,7 +1904,7 @@ const union = (a, b) => { const s = new Set(a); b.forEach(x => s.add(x)); return
 function finish(res) {
   res.outS = union(res.tdS, res.ffS);
   res.listsFF = withFF(res.lists, res.ffS);
-  const changed = res.outS.size || (res.hiS && res.hiS.size);
+  const changed = res.outS.size || (res.hiS && res.hiS.size) || (res.bioS && res.bioS.size);
   const pre = res.preS || new Set();
   res.postS = new Set([...res.outS].filter(i => !pre.has(i)));
   res.ev = changed ? res.run({ td: res.postS, remove: pre.size ? pre : null }) : res.base;
@@ -1915,6 +1915,8 @@ function finish(res) {
   (res.elimS || new Set()).forEach(i => { const b = res.base.rec[i]; if (b) res.ev.rec[i] = { ...b, ghost: true, elim: true, replacedBy: null }; });
   res.q = changed || res.qOpt ? res.run({ lists: res.listsFF, remove: res.tdS, ...(res.qOpt || {}) }) : res.base;
   res.pos = i => { const r = res.q.rec[i]; return r && r.type === 'call' && !res.tdS.has(i) ? r.slot : null; };
+  // quem ficou tão atrás numa lista que a simulação não chega até a pessoa (ex.: saiu de uma cota e ficou só numa lista cortada) continua visível, no fim
+  res.people.forEach((p, i) => { if (!res.ev.rec[i]) res.ev.rec[i] = { type: 'call', slot: null, via: res.kind === 'aj' ? (p.lists[0] || p.lists0[0]) : (LT.find(t => res.lists[t].includes(i)) || p.list), lote: 'T', date: null, comp: false, tail: true, beyond: true }; });
   res.orig = i => res.kind === 'aj' ? ORIG_AJ[i] : res.people[i].orig;
   res.byList = { A: [], N: [], P: [], I: [], Q: [] }; res.idx = {};
   res.people.forEach((p, i) => { const r = res.q.rec[i]; if (r && r.type === 'call' && !res.tdS.has(i) && !res.ffS.has(i)) res.byList[r.via].push(i); });
@@ -1949,12 +1951,32 @@ if (R09) ['aj', 'tec'].forEach(c => { const x = R09[c]; if (!x) return;
   RAC.forEach(t => { (x.ok[t] || []).forEach(i => { const m = HIRES[c].ok; m.set(i, (m.get(i) || []).concat(t)); HIOK[c].add(i); }); (x.rep[t] || []).forEach(i => { const m = HIRES[c].rep; m.set(i, (m.get(i) || []).concat(t)); }); });
   (x.bioOk || []).forEach(i => BIORES[c].ok.add(i)); (x.bioRep || []).forEach(i => BIORES[c].rep.add(i)); });
 const CATN = { N: 'da comissão presencial de heteroidentificação (negros)', I: 'da entrevista de indígenas', Q: 'da entrevista de quilombolas' };
+// A banca avalia a pessoa uma vez e aproveita o resultado nos dois cargos: quem foi avaliado(a) num cargo (heteroidentificação por foto
+// ou presencial, entrevista de indígenas/quilombolas, biopsicossocial) leva o mesmo resultado para o outro, se estiver na mesma cota lá.
+const HIX = { aj: new Map(), tec: new Map() }; // índice -> cargo de onde veio o resultado
+{
+  const hasL = (c, i, t) => { if (c === 'aj') { const p = AJ0[i]; return !!p && p.lists.includes(t); } const p = TEC0[i]; return !!p && (p.list === t || !!(p.xl && p.xl[t] != null) || (t === 'P' && p.pcdCls != null)); };
+  const has = (m, i, t) => (m.get(i) || []).includes(t), add = (m, i, t) => m.set(i, (m.get(i) || []).concat(t));
+  const FOTO = { aj: new Set((D.hiFoto && D.hiFoto.aj) || []), tec: new Set((D.hiFoto && D.hiFoto.tec) || []) };
+  TEC0.forEach(p => { if (!(p.aj >= 0)) return;
+    [['tec', p.i, 'aj', p.aj], ['aj', p.aj, 'tec', p.i]].forEach(([sc, si, dc, di]) => {
+      RAC.forEach(t => {
+        const ok = has(HIRES[sc].ok, si, t), bad = has(HIRES[sc].rep, si, t);
+        if ((ok || bad) && hasL(dc, di, t) && !has(HIRES[dc].ok, di, t) && !has(HIRES[dc].rep, di, t)) { add(ok ? HIRES[dc].ok : HIRES[dc].rep, di, t); if (ok) HIOK[dc].add(di); HIX[dc].set(di, sc); }
+      });
+      if (FOTO[sc].has(si) && hasL(dc, di, 'N') && !HIOK[dc].has(di) && !has(HIRES[dc].rep, di, 'N')) { HIOK[dc].add(di); FOTO[dc].add(di); HIX[dc].set(di, sc); }
+      const bOk = BIORES[sc].ok.has(si), bBad = BIORES[sc].rep.has(si);
+      if ((bOk || bBad) && hasL(dc, di, 'P') && !BIORES[dc].ok.has(di) && !BIORES[dc].rep.has(di)) { (bOk ? BIORES[dc].ok : BIORES[dc].rep).add(di); HIX[dc].set(di, sc); }
+    });
+  });
+}
+const hixTxt = (c, i) => HIX[c].has(i) ? ` Resultado da avaliação feita no cargo de ${HIX[c].get(i) === 'aj' ? 'Analista (AJAJ)' : 'Técnico (TJAJ)'}, que a banca aproveita para os dois cargos.` : '';
 const hiResAny = (c, i) => HIRES[c].ok.has(i) || HIRES[c].rep.has(i);
 // cotas raciais de que a pessoa saiu (para textos)
 function racOut(res, i) { const p = res.people[i], ts = HIRES[res.kind].rep.get(i) || (res.kind === 'aj' ? p.lists0.filter(t => RAC.includes(t)) : RAC.filter(t => p.list === t || (p.xl && p.xl[t] != null))); return ts.map(t => LNAME[t]).join(' e ') || 'da cota'; }
 function hiOffTxt(res, i) {
   const ts = HIRES[res.kind].rep.get(i) || [], still = res.kind === 'aj' ? res.people[i].lists.filter(t => RAC.includes(t)) : RAC.filter(t => res.lists[t].includes(i));
-  return `<p class="tm">Não consta entre os reconhecidos no resultado preliminar ${ts.map(t => CATN[t]).join(' e ')} (${R09_ED}): não compareceu ou não foi reconhecido(a). O prazo de recurso é de ${R09.recDias} dias úteis. Se o recurso for aceito, marque “Aprovado(a)” no botão HI e a fila volta.${still.length ? ` Sai só da lista ${ts.map(t => LNAME[t]).join(' e ')}; continua na ${still.map(t => LNAME[t]).join(' e ')}.` : ''}</p>`;
+  return `<p class="tm">Não consta entre os reconhecidos no resultado preliminar ${ts.map(t => CATN[t]).join(' e ')} (${R09_ED}): não compareceu ou não foi reconhecido(a).${hixTxt(res.kind, i)} O prazo de recurso é de ${R09.recDias} dias úteis. Se o recurso for aceito, marque “Aprovado(a)” no botão HI e a fila volta.${still.length ? ` Sai só da lista ${ts.map(t => LNAME[t]).join(' e ')}; continua na ${still.map(t => LNAME[t]).join(' e ')}.` : ''}</p>`;
 }
 // remove a pessoa das listas indicadas (técnico); se sair de todas as cotas raciais e tiver classificação PcD válida, entra na lista PcD
 function dropLists(res, lists, i, ts, pcdOk) {
@@ -2036,7 +2058,7 @@ function computeAJ(st, m) {
     else if (e && e.tit != null) { tit = +e.tit; proj = e.proj != null ? e.proj : p.proj0; }
     else if (mode !== 'proj' && p.proj0) { tit = 0; proj = false; zero = true; }
     else { tit = p.tit0; proj = p.proj0; }
-    return { ...p, tit, proj, zero, fromDef, ord, tot: tot != null ? r2(tot) : r2(p.pre + tit), lists0: p.lists, hi: false };
+    return { ...p, tit, proj, zero, fromDef, ord: ord != null ? ord : (e && e.tit != null ? null : p.ord), tot: tot != null ? r2(tot) : r2(p.pre + tit), lists0: p.lists, hi: false };
   });
   const tdS = setOf(A.td), ffS = setOf(A.ff), hiReq = setOf(A.hi || {}), shS = addShared('aj', tdS, ffS, hiReq); ffS.forEach(i => tdS.delete(i));
   const sitM = sitTd(st, 'aj'), sitS = new Set(); sitM.forEach((w, i) => { if (!tdS.has(i) && !ffS.has(i)) { tdS.add(i); sitS.add(i); } });
@@ -2679,8 +2701,9 @@ function mcDate(nm, r, V) {
   let lo = 0, hi = sch.length; while (lo < hi) { const md = (lo + hi) >> 1; if (sch[md].cum >= need - 1e-9) hi = md; else lo = md + 1; }
   if (lo < sch.length) return sch[lo].d;
   if (!(r.post > 0.05)) return Infinity;
-  const m = Math.ceil((V - nm.Xsite * r.c) / (r.post / 12));
-  return m > 240 ? Infinity : nm.lastD + Math.max(1, m);
+  // depois do último lote simulado, a lista anda só com a vacância; depois do fim da validade (prorrogada) não há mais convocação por este concurso
+  const m = Math.ceil((V - nm.Xsite * r.c) / (r.post / 12)), d = nm.lastD + Math.max(1, m), lim = nm.E ? nm.E.end1 : nm.lastD + 24;
+  return d > lim ? Infinity : d;
 }
 // faixa de datas e chances de uma pessoa (só os sorteios em que ela não desiste)
 function mcPerson(nm, i) {
@@ -2693,9 +2716,9 @@ function mcPerson(nm, i) {
   const out = n ? { n, p10: q(0.1), p50: q(0.5), p90: q(0.9), pPer: inP / n, pV0: E ? v0 / n : null, pV1: E ? v1 / n : null, pVal: E ? (E.prorr ? v1 : v0) / n : null } : null;
   nm.pc.set(i, out); return out;
 }
-const fd2 = d => d == null || !isFinite(d) ? 'sem previsão' : fmtDate(d);
-const fdS = d => d == null || !isFinite(d) ? 'depois' : MES[((d % 12) + 12) % 12] + '/' + String(Math.floor(d / 12)).slice(2);
-const rngTxt = m => m ? (m.p10 === m.p90 ? fd2(m.p50) : `entre ${fd2(m.p10)} e ${fd2(m.p90)}`) : '—';
+const fd2 = d => d == null || !isFinite(d) ? 'após a validade' : fmtDate(d);
+const fdS = d => d == null || !isFinite(d) ? 'após a validade' : MES[((d % 12) + 12) % 12] + '/' + String(Math.floor(d / 12)).slice(2);
+const rngTxt = m => !m ? '—' : !isFinite(m.p10) ? 'depois do fim da validade' : m.p10 === m.p90 ? fd2(m.p50) : !isFinite(m.p90) ? `a partir de ${fd2(m.p10)}, ou depois do fim da validade` : `entre ${fd2(m.p10)} e ${fd2(m.p90)}`;
 // situação da validade de uma pessoa, pela chance nos sorteios
 function valVerdict(nm, m) {
   const E = nm && nm.E; if (!E || !m) return null;
@@ -3570,6 +3593,8 @@ function buildGroups(res) {
   });
   const tail = [];
   res.people.forEach((p, i) => { const r = ev.rec[i]; if (r && r.tail) tail.push({ kind: r.type === 'refuse' ? 'refuse' : 'call', i, k: res.pos(i) || (res.base.rec[i] && res.base.rec[i].slot) || r.atSlot || 1e6 }); });
+  { const shown = new Set(); groups.forEach(G => G.rows.forEach(r => { if (r.i != null) shown.add(r.i); })); tail.forEach(r => shown.add(r.i));
+    res.people.forEach((p, i) => { const r = ev.rec[i]; if (!shown.has(i) && r) tail.push({ kind: r.type === 'refuse' ? 'refuse' : 'call', i, k: res.pos(i) || (res.base.rec[i] && res.base.rec[i].slot) || r.atSlot || 1e6, ghost: !!r.ghost }); }); }
   tail.sort((a, b) => a.k - b.k);
   groups.push({ key: 'T', kind: 'tail', rows: tail });
   return groups;
@@ -3679,10 +3704,10 @@ function tagsHtml(res, i, row) {
     if (i === S.ui.pins[S.cargo]) tags += '<span class="tag me">você</span>';
     if (!HIOK[res.kind].has(i) && hiApOf(res.kind, i)) tags += '<span class="tag hiok" title="Aprovação na heteroidentificação marcada por você">Heteroid. ✓ marcada</span>';
     if (hiEligible(res, i) && !res.hiS.has(i) && !hiApOf(res.kind, i)) tags += HICONV[res.kind].has(i) && !hiResAny(res.kind, i) ? `<span class="tag hi sim" title="Convocado(a) para a entrevista presencial da comissão de heteroidentificação em ${HICONV_DATE} (Edital nº 08/2026). Resultado ainda não publicado.">Entrevista HI ${HICONV_DATE.slice(0, 5)}</span>` : '<span class="tag hi sim" title="Ainda não convocado(a) para a comissão de heteroidentificação: o Edital nº 08/2026 chamou só os mais bem classificados de cada lista.">HI: não convocado</span>';
-    if (HIRES[res.kind].ok.has(i)) { const ts = HIRES[res.kind].ok.get(i); tags += `<span class="tag hiok" title="Reconhecido(a) no resultado preliminar ${ts.map(t => CATN[t]).join(' e ')} (${R09_ED})">${ts.includes('N') ? 'Heteroid.' : ts.includes('I') ? 'Indígena' : 'Quilombola'} ✓ entrevista</span>`; }
-    else if (HIOK[res.kind].has(i)) tags += `<span class="tag hiok" title="Autodeclaração de negro(a) confirmada pela comissão de heteroidentificação na 1ª etapa (fotos)${HIOK_DATE ? ', ' + HIOK_DATE : ''}">Heteroid. ✓ foto</span>`;
-    if (res.bioS && res.bioS.has(i)) tags += `<span class="tag hi" title="Deficiência não confirmada no resultado preliminar da avaliação biopsicossocial (${R09_ED}); sai da lista PcD. Cabe recurso.">PcD não confirmada${res.elimS && res.elimS.has(i) ? ' · eliminado(a)' : ''}</span>`;
-    else if (BIORES[res.kind].ok.has(i)) tags += `<span class="tag hiok" title="Deficiência confirmada no resultado preliminar da avaliação biopsicossocial (${R09_ED})">PcD ✓ biopsicossocial</span>`;
+    if (HIRES[res.kind].ok.has(i)) { const ts = HIRES[res.kind].ok.get(i); tags += `<span class="tag hiok" title="Reconhecido(a) no resultado preliminar ${ts.map(t => CATN[t]).join(' e ')} (${R09_ED}).${hixTxt(res.kind, i)}">${ts.includes('N') ? 'Heteroid.' : ts.includes('I') ? 'Indígena' : 'Quilombola'} ✓ entrevista</span>`; }
+    else if (HIOK[res.kind].has(i)) tags += `<span class="tag hiok" title="Autodeclaração de negro(a) confirmada pela comissão de heteroidentificação na 1ª etapa (fotos)${HIOK_DATE ? ', ' + HIOK_DATE : ''}.${hixTxt(res.kind, i)}">Heteroid. ✓ foto</span>`;
+    if (res.bioS && res.bioS.has(i)) tags += `<span class="tag hi" title="Deficiência não confirmada no resultado preliminar da avaliação biopsicossocial (${R09_ED}); sai da lista PcD. Cabe recurso.${hixTxt(res.kind, i)}">PcD não confirmada${res.elimS && res.elimS.has(i) ? ' · eliminado(a)' : ''}</span>`;
+    else if (BIORES[res.kind].ok.has(i)) tags += `<span class="tag hiok" title="Deficiência confirmada no resultado preliminar da avaliação biopsicossocial (${R09_ED}).${hixTxt(res.kind, i)}">PcD ✓ biopsicossocial</span>`;
     const k = ckOf(res.kind, i);
     if (k >= 0) tags += `<span class="cktag" title="Na comparação (${CK[k]})">${ckBadge(k, 'sm')}</span>`;
     else if (S.ui.q && norm(S.ui.q).trim() && cmpList(res.kind).length < CMAX) tags += `<button class="tagx cmpx" data-act="cmpAdd" data-i="${i}" title="Adicionar à comparação">+ comparar</button>`;
@@ -3943,7 +3968,7 @@ function renderDrawer() {
     if (hiEligible(res, i)) { const rp = res.hiS.has(i) && !res.hiSimS.has(i), ap = hiApOf(res.kind, i);
       hiPrev = `<p class="note"><b>Heteroidentificação: ${rp ? (res.hiOffS && res.hiOffS.has(i) ? 'não reconhecido(a)' : 'reprovado(a)') : ap ? 'aprovado(a)' : 'pendente'}</b> ${rp ? `(${res.hiOffS && res.hiOffS.has(i) ? `resultado preliminar, ${R09_ED}; cabe recurso` : 'marcado por você'}). ${hiElim(res.kind, res.people[i]) ? 'Sem classificação na ampla: eliminado(a).' : 'A posição acima já é a da' + hiStays(res, i) + '.'}` : ap ? '(marcado por você). Segue na cota e fica fora do sorteio de reprovações.' : `— ${hiPendTxt(res.kind, i)}. Marque um resultado abaixo para ver o efeito.`}</p>` + (rp ? '' : hiPrev); }
     { const p0 = res.people[i], isP = res.kind === 'aj' ? p0.lists0.includes('P') : p0.list === 'P' || p0.pcdCls != null;
-      if (isP) hiPrev += `<p class="note"><b>Avaliação biopsicossocial (PcD):</b> ${BIORES[res.kind].rep.has(i) ? `deficiência não confirmada no resultado preliminar (${R09_ED}): não compareceu ou não teve a deficiência constatada. ${(S[res.kind].bioAp || {})[i] ? '<b>Você marcou que o recurso foi aceito</b>: segue na lista PcD.' : 'Sai da lista PcD e fica só na ampla ou em outra cota em que tiver classificação; sem nenhuma, é eliminado(a).'} Cabe recurso. <button class="lnk" data-act="bioAp" data-i="${i}">${(S[res.kind].bioAp || {})[i] ? 'desfazer: considerar o resultado preliminar' : 'marcar recurso aceito (continua PcD)'}</button>` : BIORES[res.kind].ok.has(i) ? `deficiência confirmada no resultado preliminar (${R09_ED}).` : BIO[res.kind].has(i) ? `convocado(a) para ${BIO_DATE} (Edital nº 08/2026); resultado ainda não publicado` : 'ainda não convocado(a); o Edital nº 08/2026 chamou só os mais bem classificados da lista'}. Se a deficiência não for confirmada, a pessoa sai da lista PcD e fica só na ampla ou em outra cota em que tiver classificação (item 3.2.4 do Edital nº 08/2026).</p>`; }
+      if (isP) hiPrev += `<p class="note"><b>Avaliação biopsicossocial (PcD):</b> ${BIORES[res.kind].rep.has(i) ? `deficiência não confirmada no resultado preliminar (${R09_ED}): não compareceu ou não teve a deficiência constatada.${hixTxt(res.kind, i)} ${(S[res.kind].bioAp || {})[i] ? '<b>Você marcou que o recurso foi aceito</b>: segue na lista PcD.' : 'Sai da lista PcD e fica só na ampla ou em outra cota em que tiver classificação; sem nenhuma, é eliminado(a).'} Cabe recurso. <button class="lnk" data-act="bioAp" data-i="${i}">${(S[res.kind].bioAp || {})[i] ? 'desfazer: considerar o resultado preliminar' : 'marcar recurso aceito (continua PcD)'}</button>` : BIORES[res.kind].ok.has(i) ? `deficiência confirmada no resultado preliminar (${R09_ED}).${hixTxt(res.kind, i)}` : BIO[res.kind].has(i) ? `convocado(a) para ${BIO_DATE} (Edital nº 08/2026); resultado ainda não publicado` : 'ainda não convocado(a); o Edital nº 08/2026 chamou só os mais bem classificados da lista'}. Se a deficiência não for confirmada, a pessoa sai da lista PcD e fica só na ampla ou em outra cota em que tiver classificação (item 3.2.4 do Edital nº 08/2026).</p>`; }
     const ajB = res.kind === 'tec' && res.auto !== false && res.ajCat && res.ajCat[i] ? ajActs(res, i, true) : null;
     if (ajB != null) { h += `<div class="dsec"><h3>Situação desta pessoa</h3>${hiSimBtn}<p class="note">Aprovado(a) também em ${destOf(res.people[i])}: aparecem só as opções que valem para o caso (${res.ajCat[i] === 'antes' ? destOf(res.people[i]) + ' vem antes' : res.ajCat[i] === 'meio' ? 'as duas convocações ficam próximas' : 'toma posse no técnico antes de ' + destOf(res.people[i])}).</p><div class="outbtns">${ajB}</div>${hiPrev}</div>`; }
     else {
