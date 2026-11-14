@@ -954,6 +954,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);
 .pin:not(.empty) .pcot,.pin:not(.empty) .titc{color:rgba(255,255,255,.9)}
 :root[data-theme="dark"] .pin:not(.empty) .pstats>div{background:rgba(26,34,48,.94);color:var(--fg)}
 
+/* classificação antes das avaliações */
+.clw{display:block;font-size:10.5px;font-weight:500;color:var(--muted);white-space:nowrap}.clw.in{display:inline}
 /* faixa de datas, validade, cenário e recalibração */
 .mcr{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 .vtag{display:inline-block;margin-top:2px;font-size:10.5px;font-weight:650;padding:1px 7px;border-radius:99px;white-space:nowrap}
@@ -1674,6 +1676,19 @@ const TEC0 = D.tec.map((r, i) => ({ i, name: r[0], insc: r[1], list: r[2], obj: 
 // Técnico: classificação na ampla dos cotistas, tirada da lista geral do resultado (Edital 06/2026, marcações N/D/I/Q)
 const TEC_AC = new Map(); TEC0.forEach(p => { if (p.acCls != null && p.list !== 'A') TEC_AC.set(p.i, p.acCls); });
 // classificação na lista por onde a pessoa entra (no Técnico, o cotista que entra pela AC usa a classificação na ampla)
+function clsNow(res, i, via) {
+  if (!via) return null;
+  if (res.kind === 'aj') return res.ranks[via] ? res.ranks[via].get(i) : null;
+  const p = res.people[i], base = tecCls(p, via); if (base == null || !res.listsBase || res.lists === res.listsBase || !res.lists[via]) return base;
+  const m = res._cn || (res._cn = {});
+  if (!m[via]) { const B = new Set(res.listsBase[via]), C = new Set(res.lists[via]), key = j => tecCls(res.people[j], via), srt = a => a.filter(v => v != null).sort((x, y) => x - y);
+    m[via] = { rem: srt(res.listsBase[via].filter(j => !C.has(j)).map(key)), add: srt(res.lists[via].filter(j => !B.has(j)).map(key)) }; }
+  const cnt = (a, v) => { let k = 0; while (k < a.length && a[k] < v) k++; return k; };
+  return base - cnt(m[via].rem, base) + cnt(m[via].add, base);
+}
+// classificação antes dos resultados de heteroidentificação/biopsicossocial (técnico: a do edital; analista: com os mesmos títulos)
+function clsWas(res, i, via) { if (!via) return null; if (res.kind === 'aj') return res.ranksBase && res.ranksBase[via] ? res.ranksBase[via].get(i) : clsNow(res, i, via); return tecCls(res.people[i], via); }
+const clsHtml = (res, i, via) => { const n = clsNow(res, i, via), w = clsWas(res, i, via); return n == null ? '—' : `${n}º${w != null && w !== n ? `<small class="clw" title="Antes dos resultados da heteroidentificação e da avaliação biopsicossocial">era ${w}º</small>` : ''}`; };
 const tecCls = (p, via) => via === p.list ? p.cls : via === 'A' && p.acCls != null ? p.acCls : p.xl && p.xl[via] != null ? p.xl[via] : via === 'P' && p.pcdCls != null ? p.pcdCls : p.cls;
 // Técnico: cotista racial (negro, indígena ou quilombola) pela lista principal ou por uma lista extra
 const tecRac = p => RAC.includes(p.list) || !!(p.xl && RAC.some(t => p.xl[t] != null));
@@ -1795,6 +1810,7 @@ function applyState(o) {
   ['aj', 'tec'].forEach(c => { const P = S[c].P, v = P.val; P.val = { hom: v && /^\d{4}-\d{2}$/.test(v.hom || '') ? v.hom : '2026-12', anos: v && +v.anos >= 0.5 && +v.anos <= 2 ? +v.anos : 2, prorr: !(v && v.prorr === false) };
     if (P.leiPct == null || P.leiPct === '' || !isFinite(+P.leiPct)) P.leiPct = 100; else P.leiPct = Math.max(0, Math.min(100, +P.leiPct)); });
   S.ui.recal = S.ui.recal !== false;
+  S.aj.hiPct = 0; S.tec.hiPct = 0; // projeção de reprovação na heteroidentificação removida
   if (S.ui.show === 'cmp' && !S.ui.cmp[S.cargo].length) S.ui.show = '';
   S.ui.lote = null;
   if (S.ui.themeV !== 2) { S.ui.theme = 'light'; S.ui.themeV = 2; }
@@ -1934,7 +1950,8 @@ function hiPool(st, c, people, elig, manual) {
   return people.filter(p => elig(p) && p.i !== pin && !po[p.i] && !manual.has(p.i) && !HIOK[c].has(p.i) && !ap[p.i] && !(typeof HIRES !== 'undefined' && HIRES[c].rep.has(p.i)));
 }
 function drawHI(st, c, people, elig, manual) {
-  const pct = Math.max(0, Math.min(100, +st[c].hiPct || 0)); if (!pct) return new Set();
+  // desativado: o resultado da heteroidentificação foi divulgado (Edital nº 09/2026), então não há mais projeção de reprovações
+  const pct = 0; if (!pct) return new Set();
   const pool = hiPool(st, c, people, elig, manual), seed = +st[c].hiSeed || 1;
   const k = Math.round(pool.length * pct / 100);
   return new Set(pool.map(p => [hash01(p.insc + ':' + seed), p.i]).sort((a, b) => a[0] - b[0]).slice(0, k).map(x => x[1]));
@@ -2075,7 +2092,8 @@ function computeAJ(st, m) {
   const lists = ajajLists(people), ranks = compRanks(people, lists, GAPS.aj);
   const listsBase = (hiS.size || bioS.size) ? ajajLists(people.map(p => ({ ...p, lists: p.lists0 }))) : lists;
   // quem saiu de uma lista (heteroidentificação/PcD) guarda a classificação que tinha nela, só para exibição
-  if (hiS.size || bioS.size) { const rb = compRanks(people.map(p => ({ ...p, lists: p.lists0 })), listsBase, GAPS.aj); for (const t of LT) if (t !== 'A') rb[t].forEach((v, k) => { if (!ranks[t].has(k)) ranks[t].set(k, v); }); }
+  let ranksBase = null;
+  if (hiS.size || bioS.size) { const rb = compRanks(people.map(p => ({ ...p, lists: p.lists0 })), listsBase, GAPS.aj); ranksBase = rb; for (const t of LT) if (t !== 'A') rb[t].forEach((v, k) => { if (!ranks[t].has(k)) ranks[t].set(k, v); }); }
   // Otimista: um pouco mais de desistência (aprovados em outros concursos) e criação extra de cargos de analista num ano
   const otim = P.cenario === 'Otimista';
   const EP = { cenario: P.cenario, apos: Math.max(0, +P.aposAno || 0), exo: numObj(P.exoAno), fill: fillOf(P), novos: +P.novos || 0, criados: +P.criados || 0, quadro2025: +P.quadro2025 || 0, vacPrint: +P.vacPrint || 0, years: P.years.map(Y => ({ ...Y, desist: P.auto === false ? 0 : ((+Y.desist || 0) + (otim ? +P.otimDesist || 0 : 0)) / 100, extra: otim && Y.y === +P.otimAno ? (+P.otimCriados || 0) * (+P.criados > 0 ? (+P.novos || 0) / +P.criados : 0) : 0, manual: allPub(Y) ? pubSum(Y) : Y.manual })) };
@@ -2106,7 +2124,7 @@ function computeAJ(st, m) {
   }
   const baseOpt = { n: people.length, lists, lotes, PAT: D.pat, delay: Math.max(0, Math.round(+P.delay || 0)), fallback: FALLBACK_AJ, trunc: TRUNC.aj, gaps: GAPS.aj, td: new Set(), model: M, devol: devolOf(st), nac: nacOf(st, 'aj'), acRank: i => ranks.A.get(i) || Infinity };
   const run = o => simulate({ ...baseOpt, ...o });
-  return finish({ kind: 'aj', model: M, sitS, people, lists, listsBase, ranks, totals, lotes, tdS, ffS, hiS, hiOffS, bioS, elimS, hiSimS, hiOkS, shS, mpS, preS, run, mode, base: run({ lists: listsBase }), baseOpt, auto: P.auto !== false, vacWhere, recal: RC, dY: EP.years.map(Y => Y.desist) });
+  return finish({ kind: 'aj', model: M, sitS, people, lists, listsBase, ranks, ranksBase, totals, lotes, tdS, ffS, hiS, hiOffS, bioS, elimS, hiSimS, hiOkS, shS, mpS, preS, run, mode, base: run({ lists: listsBase }), baseOpt, auto: P.auto !== false, vacWhere, recal: RC, dY: EP.years.map(Y => Y.desist) });
 }
 function computeTEC(aj, st, m) {
   st = st || S; const M = m || primM(st), DV = devolOf(st), NAC = nacOf(st, 'tec');
@@ -2121,7 +2139,7 @@ function computeTEC(aj, st, m) {
     p.ajPos = aj.pos(p.aj) || (aj.base.rec[p.aj] && aj.base.rec[p.aj].slot);
     if (aj.outS.has(p.aj)) { p.ajOut = true; return; }
     const r = aj.ev.rec[p.aj];
-    if (!r || r.type !== 'call' || r.date == null || (p.ajPos || 0) > corte) return;
+    if (!r || r.type !== 'call' || r.ghost || r.beyond || (aj.elimS && aj.elimS.has(p.aj)) || r.date == null || !isFinite(r.date) || (p.ajPos || 0) > corte) return;
     p.ajDate = r.date;
     p.entry = r.date + (p.adia ? (+P.mesesAdia || 0) : 0);
   });
@@ -2337,7 +2355,7 @@ function explainVaga(res, i) {
   if (!r) return '';
   if (res.kind === 'tec') return `<div class="th">${LLONG[r.via || p.list]}</div><p>${p.cls}º na lista ${LNAME[p.list]}.${p.list !== 'A' && p.acCls != null ? ` Também está na ampla, em ${p.acCls}º (lista geral do resultado definitivo das provas, Edital nº 08/2026).${r.via === 'A' ? ' A vez chegou primeiro pela AC: entra pela ampla e não gasta vaga de cota.' : ''}` : ''}</p>`;
   const others = p.lists.filter(t => t !== r.via);
-  let h = `<div class="th">Entra pela ${LNAME[r.via]}</div><p>${res.ranks[r.via].get(i)}º na lista ${LLONG[r.via]}.</p>`;
+  let h = `<div class="th">Entra pela ${LNAME[r.via]}</div><p>${clsNow(res, i, r.via)}º na lista ${LLONG[r.via]}${clsWas(res, i, r.via) !== clsNow(res, i, r.via) ? ` (era ${clsWas(res, i, r.via)}º antes dos resultados da heteroidentificação e da avaliação biopsicossocial)` : ''}.</p>`;
   if (others.length) h += `<p>Também concorre em ${others.map(t => LNAME[t]).join(' e ')}. A vez chega primeiro pela ${LNAME[r.via]}, então ${r.via === 'A' ? `não gasta vaga de cota: o próximo cotista é chamado na vaga de ${others.map(t => LNAME[t]).join('/')}.` : 'não gasta vaga da ampla: a AC chama o próximo da lista.'}</p>`;
   return h;
 }
@@ -2550,7 +2568,7 @@ function renderPin() {
   }
   const status = res.tdS.has(i) ? 'marcado(a) com TD' : res.ffS.has(i) ? 'pediu final de fila' : r && r.type === 'refuse' ? `TD antes da convocação (${destOf(res.people[i])} antes)` : ajEff(res, i) === 'post' ? `TD depois de convocado(a) (${destOf(res.people[i])} quase junto)` : ajEff(res, i) === 'exo' ? `pede exoneração ao ir para ${destOf(res.people[i])} (novo cargo vago)` : '';
   el.innerHTML = `<div class="pin"><div><div class="eyebrow">Acompanhando · ${CARGO[c]}</div><h2 class="${c === 'aj' && p.proj ? 'proj' : ''}">${esc(p.name)}</h2>
-      <div class="note">Inscrição ${esc(p.insc)} · ${via ? LNAME[via] + ' ' + (c === 'aj' ? res.ranks[via].get(i) : tecCls(p, via)) + 'º' : ''} · ordem original ${o}ª${status ? ' · ' + status : ''}${approvals(c, i).length ? ` · <span class="tag ap" data-tip="p:${i}" style="margin-left:0">+${approvals(c, i).length} em outros concursos</span>` : ''}</div></div>
+      <div class="note">Inscrição ${esc(p.insc)} · ${via ? (() => { const n = clsNow(res, i, via), w = clsWas(res, i, via); return `${LNAME[via]} ${n}º${w != null && w !== n ? ` (era ${w}º antes da heteroidentificação/biopsicossocial)` : ''}`; })() : ''} · ordem original ${o}ª${status ? ' · ' + status : ''}${approvals(c, i).length ? ` · <span class="tag ap" data-tip="p:${i}" style="margin-left:0">+${approvals(c, i).length} em outros concursos</span>` : ''}</div></div>
     <div class="pstats">
       <div><div class="k">Posição${alts.length ? ' · ' + M0 : ''}</div><div class="v">${n ? n + 'ª' : '—'}</div><div class="s">${d ? `<span class="adv ${d > 0 ? 'up' : 'dn'}" data-tip="d:${i}">${d > 0 ? '▲' : '▼'}${Math.abs(d)}</span> vs. original` : 'igual à original'}</div></div>
       <div><div class="k">Previsão${alts.length ? ' · ' + M0 : ''}</div><div class="v">${r && r.date != null && isFinite(r.date) ? fmtDate(r.date) : 'após o período'}</div><div class="s">${r ? loteShort(res, r).split(' · ')[0] : ''} · cenário ${S[c].P.cenario}</div></div>
@@ -2868,7 +2886,7 @@ function hiEligCount(c) {
   return hiPool(S, c, res.people, c === 'aj' ? p => p.lists0.some(t => RAC.includes(t)) : tecRac, manual).length;
 }
 function renderScen() {
-  const c = S.cargo, A = S.aj, res = R(), pct = +S[c].hiPct || 0, pool = hiEligCount(c), k = Math.round(pool * pct / 100);
+  const c = S.cargo, A = S.aj, res = R();
   // barra compacta: os textos explicativos ficam nas dicas (passe o mouse ou toque no rótulo)
   let h = `<div class="scen sc-${c}">`, sn = '';
   if (c === 'aj') {
@@ -2878,10 +2896,7 @@ function renderScen() {
       ${b('proj', 'Oficial', `resultado definitivo dos títulos (${D.titRes ? `Edital nº ${D.titRes.ed}, ${D.titRes.date}` : 'resultado oficial'})`)}${b('def', 'Arquivo', `arquivo enviado · ${A.def.n} pessoas`)}</div></div>` : `<div class="sg"><div class="sl" data-tip="h:tit">Títulos</div><span class="mchip" title="Notas de títulos oficiais, sem projeção">Resultado definitivo · ${D.titRes ? `Edital nº ${D.titRes.ed}, ${D.titRes.date}` : 'resultado oficial'}</span></div>`;
     if (m === 'def') sn += `<div class="sn">${has ? `Arquivo <b>${esc(A.def.file)}</b> · ${A.def.n} ${plural(A.def.n, 'pessoa encontrada', 'pessoas encontradas')} · <button class="lnk" data-act="defUp">trocar</button> · <button class="lnk" data-act="defRm">remover</button>` : 'Envie o resultado definitivo (PDF, Excel ou CSV) para ordenar com os títulos oficiais.'}</div>`;
   }
-  h += `<div class="sg"><div class="sl" data-tip="h:hisc">Reprovação na HI</div><div class="hirow"><div class="seg3 sm" role="group" aria-label="Percentual de reprovação">${[0, 30, 60, 100].map(v => `<button data-hip="${v}" aria-pressed="${pct === v}"><b>${v}%</b></button>`).join('')}</div>
-    <label class="hipct"><input type="number" id="hiPct" min="0" max="100" step="5" value="${pct}" aria-label="Percentual de reprovados"> %</label>${pct > 0 && pct < 100 ? `<button class="btn sm ghost" data-act="hiSeed" title="Novo sorteio">↻</button>` : ''}</div></div>`;
   h += `<button class="panbtn" data-act="goPanorama" title="Abrir as Estatísticas do concurso">${ico('pie')}<span>Estatísticas do concurso</span><b aria-hidden="true">→</b></button>`;
-  if (pct) sn += `<div class="sn">${k - (res.hiOkS ? res.hiOkS.size : 0)} de ${pool} cotistas raciais reprovados na heteroidentificação${pct < 100 ? ' (sorteio simulado, não indica ninguém de verdade)' : ''}${res.hiOkS && res.hiOkS.size ? ` · ${res.hiOkS.size} ${plural(res.hiOkS.size, 'marcado', 'marcados')} como ${plural(res.hiOkS.size, 'aprovado', 'aprovados')} (<button class="lnk" data-act="hiOkClear">desfazer todos</button>)` : ''}${S.ui.pins[c] != null ? ' · o nome que você acompanha conta como aprovado' : ''}${HIOK[c].size ? ` · ${HIOK[c].size} negros já confirmados na 1ª etapa (fotos) ficam fora do sorteio` : ''}</div>`;
   { const cm = cotMode(); h += `<div class="sg cotbar"><div class="sl" data-tip="h:cot">Cotista c/ nota de ampla</div><button class="mchip" data-act="openAvanc" title="Alterar em Avançado">${MSH[cm] || COTN[cm]}</button></div>`; }
   { const cj = S.aj.P.cenario, ct = S.tec.P.cenario, same = cj === ct, RC = res.recal || {}, on = recalOn(S), nf = (RC.pub || []).length + (RC.nd || 0) + (RC.moved || []).length;
     h += `<div class="sg cenbar"><div class="sl">Cenário</div><button class="mchip${S.ui.cenInfo ? ' alt' : ''}" data-act="cenInfo" aria-expanded="${!!S.ui.cenInfo}" title="${S.ui.cenInfo ? 'Ocultar o aviso' : 'Ver o aviso do cenário'}">${esc(S[c].P.cenario)}${same ? ' · nos dois cargos' : ''} <span aria-hidden="true">ⓘ</span></button></div>`;
@@ -2931,7 +2946,7 @@ function hiRange(c, i) {
   return { ok: true, n: HIN, lo: pos[0], hi: pos[pos.length - 1], med: pos[pos.length >> 1], d1: fd(dates[0]), d2: fd(dates[dates.length - 1]) };
 }
 function hiStat(c, i) {
-  const pct = +S[c].hiPct || 0; if (!(pct > 0 && pct < 100)) return '';
+  const pct = 0; if (!(pct > 0 && pct < 100)) return '';
   const v = hiRange(c, i);
   if (!v) return `<div data-tip="h:hisc"><div class="k">Com ${pct}% reprovados${cmpAll() ? ' · ' + primM() : ''}</div><div class="v sm">calculando…</div><div class="s">vários sorteios</div></div>`;
   if (!v.ok) return `<div><div class="k">Com ${pct}% reprovados</div><div class="v">—</div><div class="s">fora da fila nos sorteios</div></div>`;
@@ -3055,7 +3070,7 @@ function renderCmp() {
     $('#cmpbody').innerHTML = '';
     renderCmpFab(0); return;
   }
-  const pct = +S[c].hiPct || 0, showHi = pct > 0 && pct < 100;
+  const pct = 0, showHi = false;
   const cell = (k, html, cls) => `<td class="${cls || ''}" style="--k:var(--k${k + 1})">${html}</td>`;
   const rows = [];
   const row = (label, f, tip) => rows.push(`<tr><th scope="row"${tip ? ` data-tip="${tip}"` : ''}>${label}</th>${L.map((i, k) => f(i, k)).join('')}</tr>`);
@@ -3082,7 +3097,7 @@ function renderCmp() {
   });
   row('Vaga', (i, k) => {
     const p = res.people[i], r = res.ev.rec[i], via = r && r.via ? r.via : isAJ ? p.lists[0] : p.list;
-    const cls = isAJ ? (res.ranks[via] && res.ranks[via].get(i)) : (p.hi ? null : tecCls(p, via));
+    const cls = isAJ ? (res.ranks[via] && res.ranks[via].get(i)) : (p.hi ? null : clsNow(res, i, via));
     const others = isAJ ? p.lists.filter(t => t !== via) : (p.list !== 'A' && p.acCls != null && !p.hi ? (via === 'A' ? [p.list] : ['A']) : []).concat(p.xl ? Object.keys(p.xl).filter(t => t !== via && t !== p.list && !(p.hi && RAC.includes(t))) : []).concat(p.xl && via !== p.list && p.list !== 'A' && !(p.list !== 'A' && p.acCls != null && !p.hi) && !(p.hi && RAC.includes(p.list)) ? [p.list] : []);
     return cell(k, `<span class="badge b-${via}" data-tip="v:${i}">${LNAME[via]}</span> ${cls ? cls + 'º' : ''}${others.length ? ` <span class="plus">+${others.map(t => LNAME[t]).join('+')}</span>` : ''}${p.hi ? `<div class="cs">era ${isAJ ? p.lists0.filter(t => RAC.includes(t)).map(t => LNAME[t]).join('+') : LNAME[p.list]} (heteroidentificação)</div>` : ''}`);
   });
@@ -3508,7 +3523,7 @@ function yearStats(res) {
     while (ci < cs.length && cs[ci].date < end) {
       const c = cs[ci++];
       if (c.ph) { ph[c.via] = Math.max(ph[c.via], c.k); continue; }
-      const v = isAJ ? res.ranks[c.via].get(c.i) : tecCls(res.people[c.i], c.via);
+      const v = clsNow(res, c.i, c.via);
       if (v > best[c.via]) best[c.via] = v;
     }
     o.maxCls = { ...best }; o.ph = { ...ph };
@@ -3689,7 +3704,7 @@ function hiLab(res, i) { return res.hiS.has(i) && !res.hiSimS.has(i) ? 'HI ✗' 
 function openHiPop(btn, i) {
   const res = R(), c = res.kind, rep = res.hiS.has(i) && !res.hiSimS.has(i), ap = hiApOf(c, i), pop = $('#tdpop'), el = hiElim(c, res.people[i]);
   pop.innerHTML = `<div class="tpt">Heteroidentificação · ${esc(nm(res, i))}</div>
-    <button data-mark="hi" data-when="ap" data-i="${i}" class="${ap ? 'on' : ''}"><b>Aprovado(a)</b><small>${HIRES[c].rep.has(i) ? 'Recurso aceito: volta para a cota' : 'Segue na cota (sai do sorteio de reprovação)'}</small></button>
+    <button data-mark="hi" data-when="ap" data-i="${i}" class="${ap ? 'on' : ''}"><b>Aprovado(a)</b><small>${HIRES[c].rep.has(i) ? 'Recurso aceito: volta para a cota' : 'Segue na cota'}</small></button>
     <button data-mark="hi" data-when="rep" data-i="${i}" class="${rep ? 'on' : ''}"><b>Reprovado(a)</b><small>${el ? 'Sem classificação na ampla: eliminado(a)' : 'Sai da cota e fica na' + hiStays(res, i)}</small></button>
     <button data-mark="hi" data-when="pend" data-i="${i}" class="${!ap && !rep ? 'on' : ''}"><b>Pendente</b><small>${HIRES[c].rep.has(i) ? `Vale o resultado preliminar (${R09_ED}): não reconhecido(a)` : HICONV[c].has(i) ? `Entrevista presencial em ${HICONV_DATE}; resultado ainda não publicado` : 'Ainda não convocado(a) para a comissão'}</small></button><button class="tpx" data-act="tdClose"><b>Cancelar</b></button>`;
   pop.hidden = false;
@@ -3757,7 +3772,7 @@ function rowHtml(res, row, g) {
       <td class="pos">${pos}</td><td>${deltaCell(res, i)}</td>
       <td><span class="name ${p.proj ? 'proj' : ''}">${esc(p.name)}</span>${sitPill('aj', i)}${tagsHtml(res, i, row)}${concLine(res, i)}${cotLine(res, i)}</td>
       <td><span class="badge b-${r.via}" data-tip="v:${i}">${LNAME[r.via]}</span>${others.length ? `<span class="plus" data-tip="v:${i}">+${others.map(t => LNAME[t]).join('+')}</span>` : ''}${p.hi ? `<span class="was">${p.lists0.filter(t => RAC.includes(t)).map(t => LNAME[t]).join('+')}</span>` : ''}</td>
-      <td class="r num">${res.ranks[r.via].get(i)}º</td>
+      <td class="r num">${clsHtml(res, i, r.via)}</td>
       <td class="r num tit ${ed && !p.fromDef ? 'edited' : ''} ${p.zero ? 'zero' : ''}" data-tip="n:${i}">${f2(p.tit)}</td>
       <td class="r num" data-tip="n:${i}"><b>${f2(p.tot)}</b></td>${simTd}
       <td>${loteCell(res, r, g)}${mcCell(res, i, r)}</td>${altMs().length ? `<td class="bcol">${altCell(res, i)}</td>` : ''}<td class="acts">${actsInner(res, i, row)}</td></tr>`;
@@ -3766,7 +3781,7 @@ function rowHtml(res, row, g) {
     <td class="pos">${pos}</td><td>${deltaCell(res, i)}</td>
     <td><span class="name">${esc(p.name)}</span>${sitPill('tec', i)}${tagsHtml(res, i, row)}${concLine(res, i)}${cotLine(res, i)}</td>
     <td><span class="badge b-${r && r.via ? r.via : p.list}" data-tip="v:${i}">${LNAME[r && r.via ? r.via : p.list]}</span>${p.hi ? `<span class="was">${LNAME[p.list]}</span>` : p.list !== 'A' && p.acCls != null ? `<span class="plus" data-tip="v:${i}">+${r && r.via === 'A' ? LNAME[p.list] : 'AC'}</span>` : ''}</td>
-    <td class="r num">${p.hi ? '—' : tecCls(p, r && r.via) + 'º'}</td><td class="r num">${p.orig}ª</td>
+    <td class="r num">${p.hi ? '—' : clsHtml(res, i, r && r.via)}</td><td class="r num">${p.orig}ª</td>
     <td class="r num" data-tip="n:${i}">${f2(p.tot)}</td>${simTd}
     <td>${loteCell(res, r, g)}${mcCell(res, i, r)}</td>${altMs().length ? `<td class="bcol">${row.kind === 'refuse' ? '' : altCell(res, i)}</td>` : ''}<td class="acts">${actsInner(res, i, row)}</td></tr>`;
 }
@@ -3780,7 +3795,7 @@ function cardHtml(res, row, g) {
   const i = row.i, p = res.people[i], r = res.ev.rec[i], n = res.pos(i);
   const pos = row.kind === 'refuse' || res.tdS.has(i) ? '—' : (n || '—');
   const via = r ? r.via : p.list, sub = [];
-  sub.push(`<span><span class="badge b-${via}">${LNAME[via]}</span>${isAJ && p.lists.length > 1 ? `<span class="plus">+${p.lists.filter(t => t !== via).map(t => LNAME[t]).join('+')}</span>` : !isAJ && p.list !== 'A' && p.acCls != null && !p.hi ? `<span class="plus">+${via === 'A' ? LNAME[p.list] : 'AC'}</span>` : ''} ${isAJ ? res.ranks[via].get(i) : tecCls(p, via)}º</span>`);
+  sub.push(`<span><span class="badge b-${via}">${LNAME[via]}</span>${isAJ && p.lists.length > 1 ? `<span class="plus">+${p.lists.filter(t => t !== via).map(t => LNAME[t]).join('+')}</span>` : !isAJ && p.list !== 'A' && p.acCls != null && !p.hi ? `<span class="plus">+${via === 'A' ? LNAME[p.list] : 'AC'}</span>` : ''} ${(() => { const n = clsNow(res, i, via), w = clsWas(res, i, via); return `${n}º${w != null && w !== n ? ` <small class="clw in">era ${w}º</small>` : ''}`; })()}</span>`);
   sub.push(`<span>${isAJ ? `tít. ${f2(p.tit)} · <b>${f2(p.tot)}</b>` : `ordem ${p.orig}ª · ${f2(p.tot)}`}</span>`);
   sub.push(loteCell(res, r, g) + mcCell(res, i, r));
   if (altMs().length && row.kind !== 'refuse') sub.push(`<span class="bsub">${altCell(res, i)}</span>`);
@@ -3929,7 +3944,7 @@ function renderDrawer() {
   const L = loteOf(res, r);
   h += `<div class="dgrid"><div><div class="k">Posição</div><div class="v">${td ? 'saiu' : n ? n + 'ª' : '—'} <small>orig. ${res.orig(i)}ª</small></div></div>
     <div><div class="k">${r && r.comp ? 'Complementar' : L ? 'Lote ' + L.id : 'Lote'}</div><div class="v">${r && r.date != null && isFinite(r.date) ? fmtDate(r.date) : '—'}</div></div>
-    <div><div class="k">Vaga</div><div class="v">${r ? LNAME[r.via] : '—'} <small>${isAJ && r ? res.ranks[r.via].get(i) + 'º' : !isAJ ? tecCls(p, r && r.via) + 'º' : ''}</small></div></div></div>`;
+    <div><div class="k">Vaga</div><div class="v">${r ? LNAME[r.via] : '—'} <small>${r ? (() => { const n = clsNow(res, i, r.via), w = clsWas(res, i, r.via); return n == null ? '' : `${n}º${w != null && w !== n ? ` (era ${w}º)` : ''}`; })() : ''}</small></div></div></div>`;
   { const all = approvals(c, i);
     if (all.length) h += `<div class="dsec"><h3>Aprovações em outros concursos (${all.length})</h3><div class="aplist">${all.map(x => `<div class="apitem ${x.status === 'parcial' ? 'parc' : ''}">${apLine(x)}</div>`).join('')}</div><p class="note">Cruzamento pelo nome completo com ${APD.src.length} resultados de concursos (veja a lista no rodapé). Pode haver homônimos. Quem já foi aprovado(a) em outro concurso tem mais chance de enviar TD ou pedir final de fila.</p></div>`; }
   if (r && r.type === 'call' && !res.outS.has(i)) {
@@ -4376,9 +4391,10 @@ function setTitMode(m) {
   if (m === 'def' && !(S.aj.def && S.aj.def.n)) { $('#defFile').click(); return; }
   if ((S.aj.titMode || 'proj') === m) return;
   S.aj.titMode = m; update(true);
-  toast(m === 'def' ? 'Ordenado pelo resultado definitivo' : m === 'semproj' ? 'Ordenado sem os títulos projetados' : 'Ordenado com os títulos projetados');
+  toast(m === 'def' ? 'Ordenado pelo arquivo enviado' : 'Ordenado pelos títulos definitivos (oficial)');
 }
 function setHiPct(v) {
+  return; // projeção de reprovação na heteroidentificação removida
   v = Math.max(0, Math.min(100, Math.round(+v || 0)));
   if ((+S[S.cargo].hiPct || 0) === v) return;
   S[S.cargo].hiPct = v; update(false);
